@@ -1,5 +1,39 @@
-const CACHE_STATIS_NAME = 'static-v5';
-const CAHCE_DYNAMI_NAME = 'dynamic-v2';
+importScripts('/src/js/idb.js');
+importScripts('/src/js/indexdb.js');
+
+const CACHE_STATIS_NAME = 'static-v10';
+const CAHCE_DYNAMIC_NAME = 'dynamic-v2';
+let statisAssets = [
+  '/',
+  '/index.html',
+  'offline.html',
+  '/src/js/app.js',
+  '/src/js/feed.js',
+  '/src/js/idb.js',
+  '/src/js/promise.js',
+  '/src/js/fetch.js',
+  '/src/js/material.min.js',
+  '/src/css/app.css',
+  '/src/css/feed.css',
+  '/src/images/main-image.jpg',
+  'https://fonts.googleapis.com/css?family=Roboto:400,700',
+  'https://fonts.googleapis.com/icon?family=Material+Icons',
+  'https://cdnjs.cloudflare.com/ajax/libs/material-design-lite/1.3.0/material.indigo-pink.min.css'
+];
+
+function trimCache(cacheName, maxItems) {
+  caches.open(cacheName)
+    .then(cache => {
+      return cache.keys()
+        .then(keys => {
+          if (keys.length > maxItems) {
+            cache.delete(keys[0])
+              .then(trimCache(cacheName, maxItems));
+          }
+        })
+    })
+
+}
 
 self.addEventListener('install', function (event) {
   console.log('[Service Worker] Installing Service Worker ...', event);
@@ -8,22 +42,7 @@ self.addEventListener('install', function (event) {
     caches.open(CACHE_STATIS_NAME)
       .then(cache => {
         console.log('Service Worker: precaching app shell');
-        cache.addAll([
-          '/',
-          '/index.html',
-          'offline.html',
-          '/src/js/app.js',
-          '/src/js/feed.js',
-          '/src/js/promise.js',
-          '/src/js/fetch.js',
-          '/src/js/material.min.js',
-          '/src/css/app.css',
-          '/src/css/feed.css',
-          '/src/images/main-image.jpg',
-          'https://fonts.googleapis.com/css?family=Roboto:400,700',
-          'https://fonts.googleapis.com/icon?family=Material+Icons',
-          'https://cdnjs.cloudflare.com/ajax/libs/material-design-lite/1.3.0/material.indigo-pink.min.css'
-        ]);
+        cache.addAll(statisAssets);
       })
   )
 });
@@ -34,7 +53,7 @@ self.addEventListener('activate', function (event) {
     caches.keys()
       .then(keyList => {
         return Promise.all(keyList.map(key => {
-          if (key !== CACHE_STATIS_NAME && key !== CAHCE_DYNAMI_NAME) {
+          if (key !== CACHE_STATIS_NAME && key !== CAHCE_DYNAMIC_NAME) {
             return caches.delete(key);
           }
         }));
@@ -43,30 +62,127 @@ self.addEventListener('activate', function (event) {
   return self.clients.claim();
 });
 
+
+// self.addEventListener('fetch', function (event) {
+//   event.respondWith(
+//     caches.match(event.request)
+//       .then(response => {
+//         if (response) {
+//           return response;
+//         } else {
+//           return fetch(event.request)
+//             .then(res => {
+//               return caches.open(CAHCE_DYNAMIC_NAME)
+//                 .then(cache => {
+//                   cache.put(event.request.url, res.clone());
+//                   return res;
+//                 })
+//             })
+//             .catch(err => {
+//               return caches.open(CACHE_STATIS_NAME)
+//                 .then(cache => {
+//                   return cache.match('/offline.html');
+//                 });
+//             });
+//         }
+//       })
+//   );
+//
+//
+// });
+
+
+// cache-only strategy
+// self.addEventListener('fetch', function (event) {
+//   event.respondWith(
+//     caches.match(event.request)
+//   );
+// });
+
+// network-only strategy
+// self.addEventListener('fetch', function (event) {
+//   event.respondWith(
+//     fetch(event.request)
+//   );
+// });
+
+
+// self.addEventListener('fetch', function (event) {
+//   event.respondWith(
+//     fetch(event.request)
+//       .then(res => {
+//         return caches.open(CAHCE_DYNAMIC_NAME)
+//                 .then(cache => {
+//                   cache.put(event.request.url, res.clone());
+//                   return res;
+//                 })
+//       })
+//       .catch(err => {
+//         return caches.match(event.request)
+//       })
+//   );
+// });
+
+
+function isInArray(string, array) {
+  for (let i = 0; i < array.length; i++) {
+    if (array[i] === string) {
+      return true;
+    }
+  }
+  return false;
+}
+
 self.addEventListener('fetch', function (event) {
-  event.respondWith(
-    caches.match(event.request)
-      .then(response => {
-        if (response) {
-          return response;
-        } else {
-          return fetch(event.request)
-            .then(res => {
-              return caches.open(CAHCE_DYNAMI_NAME)
-                .then(cache => {
-                  cache.put(event.request.url, res.clone());
-                  return res;
-                })
+  let url = 'https://pwagram-5d1f3.firebaseio.com/posts.json';
+
+  if (event.request.url.indexOf(url) > -1) {
+    event.respondWith(
+       fetch(event.request)
+        .then(res => {
+          let clonedRes = res.clone();
+          clearAllData('posts')
+            .then(() => {
+              return clonedRes.json()
             })
-            .catch(err => {
-              return caches.open(CACHE_STATIS_NAME)
-                .then(cache => {
-                  return cache.match('/offline.html');
-                });
+            .then(data => {
+              for (let key in data) {
+                writeData('posts', data[key]);
+              }
             });
-        }
-      })
-  );
-
-
+          return res;
+        })
+  )
+  } else if(isInArray(event.request.url, statisAssets)) {
+    event.respondWith(
+      caches.match(event.request)
+    );
+  }else {
+    event.respondWith(
+      caches.match(event.request)
+        .then(response => {
+          if (response) {
+            return response;
+          } else {
+            return fetch(event.request)
+              .then(res => {
+                return caches.open(CAHCE_DYNAMIC_NAME)
+                  .then(cache => {
+                    // trimCache(CAHCE_DYNAMIC_NAME, 3);
+                    cache.put(event.request.url, res.clone());
+                    return res;
+                  })
+              })
+              .catch(err => {
+                return caches.open(CACHE_STATIS_NAME)
+                  .then(cache => {
+                    if (event.request.headers.get('accept').includes('text/html')) {
+                      return cache.match('/offline.html');
+                    }
+                  });
+              });
+          }
+        })
+    );
+  }
 });
