@@ -8,7 +8,8 @@ let statisAssets = [
   '/index.html',
   'offline.html',
   '/src/js/app.js',
-  '/src/js/feed.js',
+  '/src/js/app.js',
+  '/src/js/indexdb.js',
   '/src/js/idb.js',
   '/src/js/promise.js',
   '/src/js/fetch.js',
@@ -195,18 +196,14 @@ self.addEventListener('sync', (event) => {
       readAllData('sync-posts')
         .then(data => {
           for (let dt of data) {
+            let postData = new FormData();
+            postData.append('id', dt.id);
+            postData.append('title', dt.title);
+            postData.append('location', dt.location);
+            postData.append('file', dt.picture, dt.id + '.png');
             fetch('https://us-central1-pwagram-5d1f3.cloudfunctions.net/storePostData', {
               method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json',
-              },
-              body: JSON.stringify({
-                id: dt.id,
-                title: dt.title,
-                location: dt.location,
-                image: 'whatever image'
-              })
+              body: postData
             })
               .then(res => {
                 console.log('Sent data', res);
